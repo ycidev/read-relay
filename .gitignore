@@ -5,5 +5,5 @@
 __pycache__
 
 # Ignore all .json files (e.g. config.json, but not config.json.example)
-.json
+*.json
 !config.json.example
