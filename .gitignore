@@ -1,2 +1,9 @@
 # Ignore .vscode settings
 .vscode
+
+# Ignore Python bytecode files and cache directories
+__pycache__
+
+# Ignore all .json files (e.g. config.json, but not config.json.example)
+.json
+!config.json.example
