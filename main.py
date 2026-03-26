@@ -4,9 +4,12 @@ import time
 import subprocess
 import sys
 import json
+import socket
+from INA219 import INA219
 
 
 def shutdown():
+    """Shut down the Raspberry Pi safely."""
     log("Shutting down Raspberry Pi...")
 
     # Wait a moment to ensure all logs are flushed before shutting down
@@ -18,7 +21,13 @@ def shutdown():
 
 
 def cleanup(exit_code):
+    """Perform any necessary cleanup before exiting the script."""
     unmount_device()
+
+    if exit_code == 0:
+        log("=== ReadRelay Finished without Errors ===")
+    else:
+        log(f"=== ReadRelay Exited with Errors ===")
 
     if AUTO_SHUTDOWN:
         shutdown()
@@ -54,7 +63,7 @@ def load_config():
 
 def setup():
     """Set up global variables from the config file."""
-    global MOUNT_POINT, DEVICE_PATH, REMOTE_DIR, TARGET_DIR, SYNC_DIRECTION, LOG_FILE, AUTO_SHUTDOWN
+    global MOUNT_POINT, DEVICE_PATH, REMOTE_DIR, TARGET_DIR, SYNC_DIRECTION, LOG_FILE, AUTO_SHUTDOWN, BATTERY_ENABLED, BATTERY_THRESHOLD
 
     config = load_config()
 
@@ -66,12 +75,25 @@ def setup():
     # System config
     LOG_FILE = config["system"]["log_file"]
     AUTO_SHUTDOWN = config["system"]["auto_shutdown"]
+    BATTERY_ENABLED = config["system"]["battery"]["enabled"]
+    BATTERY_THRESHOLD = config["system"]["battery"]["threshold"]
 
     # Sync config
     REMOTE_DIR = config["sync"]["remote_dir"]
     SYNC_DIRECTION = config["sync"]["sync_direction"]
 
     log("Config loaded successfully.")
+
+
+def check_battery():
+    """Check the battery level using the INA219 sensor. If the battery level is below the threshold, log a warning and shut down."""
+    ina219 = INA219(addr=0x43)
+    battery_percent = ina219.getPercent()
+    log(f"Battery level: {battery_percent:.2f}%")
+
+    if battery_percent < BATTERY_THRESHOLD:
+        log(f"Warning: Battery level is below {BATTERY_THRESHOLD}%. Initiating shutdown to prevent damage.")
+        shutdown()
 
 
 def wait_for_device():
@@ -87,7 +109,18 @@ def unmount_device():
 
 
 def wait_for_wifi():
-    pass
+    """Check for Wi-Fi connectivity by attempting to connect to a well-known server. If the connection fails, log an error and exit."""
+    timeout = 3
+    host = "8.8.8.8"
+    port = 53
+    try:
+        socket.setdefaulttimeout(timeout)
+        socket,socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
+        log("Wi-Fi connection established.")
+    except socket.error as ex:
+        log(f"Error: No Wi-Fi connection. {ex}")
+        log("Please connect to Wi-Fi and restart the script.")
+        cleanup(1)
 
 
 def sync_files():
@@ -95,13 +128,14 @@ def sync_files():
 
 
 def main():
+    """Main function to orchestrate the steps of the script."""
     log("=========== ReadRelay Started ===========")
     setup()
+    if BATTERY_ENABLED: check_battery()
     wait_for_device()
     mount_device()
     wait_for_wifi()
     sync_files()
-    log("=== ReadRelay Finished without Errors ===")
     cleanup(0)
 
 
